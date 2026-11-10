@@ -35,12 +35,7 @@ enum class DialogResult(val s: Double) { NONE(0.0), OK(0.0), DELAYED_OR_WRONG(0.
 
 enum class RiskLevel { NORMAL, CAUTION, ALERT, DANGER }
 
-data class RiskResult(
-    val raw: Double, val floor: Double, val score: Double, val level: RiskLevel,
-    val parts: Map<String, Double>,       // 요소별 0~1 값
-    val points: Map<String, Double> = emptyMap(), // 요소별 기여 점수(가중치 × 값), 화면 막대용
-    val maxPoints: Map<String, Double> = emptyMap(),
-)
+data class RiskResult(val raw: Double, val floor: Double, val score: Double, val level: RiskLevel, val parts: Map<String, Double>)
 
 class RiskEngine(private val p: RiskParams = RiskParams()) {
 
@@ -64,10 +59,8 @@ class RiskEngine(private val p: RiskParams = RiskParams()) {
             if (i.consecutiveNoAnswer >= p.floorNoAnswerCount) p.floorNoAnswerScore else 0.0,
         )
         val score = minOf(100.0, maxOf(raw, floor))
-        val parts = mapOf("sT" to sT, "sC" to sC, "sM" to sM, "sS" to sS, "sV" to sV, "sD" to sD)
-        val weights = mapOf("sT" to p.wT, "sC" to p.wC, "sM" to p.wM, "sS" to p.wS, "sV" to p.wV, "sD" to p.wD)
-        return RiskResult(raw, floor, score, levelOf(score), parts,
-            parts.mapValues { (k, v) -> round1(weights.getValue(k) * v) }, weights)
+        return RiskResult(raw, floor, score, levelOf(score),
+            mapOf("sT" to sT, "sC" to sC, "sM" to sM, "sS" to sS, "sV" to sV, "sD" to sD))
     }
 
     fun levelOf(score: Double): RiskLevel = when {

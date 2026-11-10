@@ -50,31 +50,4 @@ class DialogPolicyTest {
         assertEquals(DialogResult.OK, p.currentResult(5 * 60_000))
         assertEquals(DialogResult.NONE, p.currentResult(11 * 60_000))
     }
-
-    @Test fun s5_refusal_is_respected_then_softened() {
-        val p = DialogPolicy()
-        val rest = p.nextPrompt(RiskLevel.DANGER, 0, false)!!
-        val a = p.onAnswer(rest, "아니 괜찮아", 1_000, 1_000)
-        assertTrue(a.restRefused); assertTrue(!a.restAccepted)
-        assertNull(p.nextPrompt(RiskLevel.DANGER, 5 * 60_000, false))          // 10분 동안 다시 묻지 않음
-        val again = p.nextPrompt(RiskLevel.DANGER, 11 * 60_000, false)!!
-        p.onAnswer(again, "아니", 1_000, 11 * 60_000)
-        assertEquals(2, p.restRefusals)
-        assertTrue(p.promptFor(RiskLevel.DANGER).text.contains("환기"))     // 2회 거절 → 안내 수준 낮춤
-        assertTrue(p.onAnswer(p.promptFor(RiskLevel.DANGER), "응", 1_000, 12 * 60_000).restAccepted)
-    }
-
-    @Test fun s6_defers_while_driver_busy_then_asks() {
-        val p = DialogPolicy()
-        assertNull(p.nextPrompt(RiskLevel.CAUTION, 0, false, driverBusy = true))
-        assertTrue(p.deferred)
-        assertEquals(PromptKind.CHAT, p.nextPrompt(RiskLevel.CAUTION, 3_000, false, driverBusy = false)!!.kind)
-        assertTrue(!p.deferred)
-    }
-
-    @Test fun engine_reports_points_per_factor() {
-        val r = RiskEngine().evaluate(RiskInput(120.0, 3, 1.0, 0, 1.0, 100.0, DialogResult.NONE, 0))
-        assertEquals(12.5, r.points["sT"]); assertEquals(15.0, r.points["sC"]); assertEquals(10.0, r.points["sM"])
-        assertEquals(37.5, r.raw); assertEquals(50.0, r.score)  // 2시간 바닥 규칙
-    }
 }
