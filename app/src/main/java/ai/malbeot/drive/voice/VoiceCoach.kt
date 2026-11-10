@@ -65,7 +65,9 @@ class VoiceCoach(
         r.setRecognitionListener(object : RecognitionListener {
             override fun onResults(results: Bundle?) =
                 finish(results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull())
-            override fun onError(error: Int) = finish(null)
+            // 음성인식 오류(에뮬레이터 마이크 없음 등)는 바로 무응답 처리하지 않고,
+            // 10초 타임아웃까지 시연 버튼 대답을 기다린다. 10초 안에 대답이 없으면 그때 무응답.
+            override fun onError(error: Int) = onStatus("음성인식 종료(코드 $error) → 10초 안에 버튼으로 대답 가능")
             override fun onReadyForSpeech(params: Bundle?) = onStatus("듣는 중…")
             override fun onBeginningOfSpeech() {}
             override fun onRmsChanged(rmsdB: Float) {}
