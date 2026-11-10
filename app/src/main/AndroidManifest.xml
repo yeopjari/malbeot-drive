@@ -8,6 +8,10 @@
     <uses-permission android:name="pleos.car.permission.CAR_SPEED" />
     <uses-permission android:name="android.car.permission.CAR_SPEED" />      <!-- AAOS 차속 -->
     <uses-permission android:name="android.car.permission.CAR_POWERTRAIN" /> <!-- AAOS 기어 -->
+    <!-- Pleos NaviHelper 권한 (공식 샘플 pleos-sample-navi-app 기준) -->
+    <uses-permission android:name="pleos.car.permission.NAVI_ROUTE" />
+    <uses-permission android:name="pleos.car.permission.NAVI_ROUTE_SEARCH" />
+    <uses-permission android:name="pleos.car.permission.NAVI_CUSTOM_ROUTE" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />

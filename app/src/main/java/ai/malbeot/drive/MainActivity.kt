@@ -13,6 +13,7 @@ import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import ai.malbeot.drive.signal.AaosSignals
 import ai.malbeot.drive.signal.VehicleProbe
+import ai.malbeot.drive.navi.NaviBridge
 import ai.malbeot.drive.voice.VoiceCoach
 import ai.malbeot.engine.DialogPolicy
 import ai.malbeot.engine.DialogResult
@@ -54,6 +55,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var probe: VehicleProbe
     private lateinit var aaos: AaosSignals
     private lateinit var voice: VoiceCoach
+    private lateinit var navi: NaviBridge
 
     private val ticker = object : Runnable {
         override fun run() { render(); main.postDelayed(this, 1_000) }
@@ -67,6 +69,7 @@ class MainActivity : AppCompatActivity() {
         val buttons = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.START
+            addButton("목적지 안내") { navi.startDemoRoute() }
             addButton("말 걸기") { askNow() }
             addButton("대답(정상)") { voice.simulate(answerFor(currentPrompt), 1_500) }
             addButton("늦은 대답") { voice.simulate(answerFor(currentPrompt), 5_000) }
@@ -83,6 +86,7 @@ class MainActivity : AppCompatActivity() {
         probe = VehicleProbe(this, ::onSignal)
         aaos = AaosSignals(this, ::onSignal)
         voice = VoiceCoach(this, onStatus = { s -> onSignal(VehicleProbe.KEY_INFO, s) }, onHeard = ::onHeard)
+        navi = NaviBridge(this) { s -> onSignal(VehicleProbe.KEY_INFO, s) }
         render()
     }
 
@@ -93,6 +97,7 @@ class MainActivity : AppCompatActivity() {
         super.onStart()
         probe.start()
         voice.start()
+        navi.start()
         // 차속(android.car.permission.CAR_SPEED)·마이크는 '위험 권한'이라 실행 중에 사용자 허용을 받아야 한다
         val need = RUNTIME_PERMISSIONS.filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }
         if (need.isEmpty()) aaos.start() else requestPermissions(need.toTypedArray(), REQ_PERMS)
@@ -110,7 +115,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onStop() {
         main.removeCallbacks(ticker)
-        probe.stop(); aaos.stop(); voice.stop()
+        probe.stop(); aaos.stop(); voice.stop(); navi.stop()
         super.onStop()
     }
 
@@ -179,7 +184,8 @@ class MainActivity : AppCompatActivity() {
         talk = "운전자: $heard  →  ${DIALOG_KO[a.result]} (${latencyMs / 1000.0}초)"
         when {
             a.restAccepted -> {
-                restStop = "🅿 쉼터를 경유지로 추가합니다 (NaviHelper 연동 예정)"
+                restStop = "🅿 쉼터를 경유지로 추가했습니다 (${NaviBridge.DEMO_REST_STOP.poiName})"
+                navi.addRestStop()
                 voice.say("좋아요. 가까운 쉼터를 경유지로 넣을게요.")
             }
             p.kind == PromptKind.REST -> voice.say("알겠어요. 조금 뒤에 다시 여쭤볼게요.")
