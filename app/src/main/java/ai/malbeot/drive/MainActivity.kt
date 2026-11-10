@@ -1,5 +1,6 @@
 package ai.malbeot.drive
 
+import android.content.pm.PackageManager
 import android.graphics.Color
 import android.os.Bundle
 import android.os.SystemClock
@@ -41,13 +42,28 @@ class MainActivity : AppCompatActivity() {
         render()
     }
 
-    override fun onStart() { super.onStart(); probe.start(); aaos.start() }
+    override fun onStart() {
+        super.onStart()
+        probe.start()
+        // 차속(android.car.permission.CAR_SPEED)은 '위험 권한'이라 실행 중에 사용자 허용을 받아야 한다
+        val need = RUNTIME_PERMISSIONS.filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }
+        if (need.isEmpty()) aaos.start() else requestPermissions(need.toTypedArray(), REQ_PERMS)
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode != REQ_PERMS) return
+        permissions.forEachIndexed { i, p ->
+            if (grantResults.getOrNull(i) != PackageManager.PERMISSION_GRANTED) onSignal(VehicleProbe.KEY_ERROR, "권한 거부: ${p.substringAfterLast('.')}")
+        }
+        aaos.start()
+    }
     override fun onStop() { probe.stop(); aaos.stop(); super.onStop() }
 
     private fun onSignal(key: String, value: Any?) = runOnUiThread {
         val now = SystemClock.elapsedRealtime()
         when (key) {
-            VehicleProbe.KEY_ERROR, VehicleProbe.KEY_INFO -> { log.addFirst("$key: $value"); while (log.size > 6) log.removeLast() }
+            VehicleProbe.KEY_ERROR, VehicleProbe.KEY_INFO -> { log.addFirst("$key: $value"); while (log.size > 10) log.removeLast() }
             else -> values[key] = value?.toString() ?: "null"
         }
         when (key) {
@@ -84,5 +100,13 @@ class MainActivity : AppCompatActivity() {
             appendLine()
             log.forEach { appendLine(it) }
         }
+    }
+
+    companion object {
+        private const val REQ_PERMS = 1
+        private val RUNTIME_PERMISSIONS = listOf(
+            "android.car.permission.CAR_SPEED",
+            android.Manifest.permission.RECORD_AUDIO,
+        )
     }
 }

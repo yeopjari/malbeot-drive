@@ -23,16 +23,21 @@ class AaosSignals(private val context: Context, private val onEvent: (key: Strin
 
     fun start() {
         runCatching {
+            stop() // 권한 허용 뒤 다시 불릴 수 있으므로 중복 구독 방지
             car = Car.createCar(context)
             manager = car!!.getCarManager(Car.PROPERTY_SERVICE) as CarPropertyManager
-            manager!!.registerCallback(callback, VehiclePropertyIds.PERF_VEHICLE_SPEED, CarPropertyManager.SENSOR_RATE_ONCHANGE)
-            manager!!.registerCallback(callback, VehiclePropertyIds.GEAR_SELECTION, CarPropertyManager.SENSOR_RATE_ONCHANGE)
+            for ((id, name) in listOf(VehiclePropertyIds.PERF_VEHICLE_SPEED to "차속", VehiclePropertyIds.GEAR_SELECTION to "기어")) {
+                val ok = runCatching { manager!!.registerCallback(callback, id, CarPropertyManager.SENSOR_RATE_ONCHANGE) }
+                    .getOrElse { e -> onEvent(VehicleProbe.KEY_ERROR, "AAOS $name 구독 실패: $e"); false }
+                onEvent(VehicleProbe.KEY_INFO, "AAOS $name 구독 ${if (ok) "성공" else "실패"}")
+            }
         }.onFailure { onEvent(VehicleProbe.KEY_ERROR, "AAOS Car API 실패: $it") }
     }
 
     fun stop() {
         runCatching { manager?.unregisterCallback(callback) }
         runCatching { car?.disconnect() }
+        manager = null; car = null
     }
 
     private fun gearName(g: Int?): String = when (g) {

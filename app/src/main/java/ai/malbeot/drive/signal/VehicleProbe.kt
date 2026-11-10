@@ -32,7 +32,7 @@ class VehicleProbe(context: Context, private val onEvent: (key: String, value: A
             .onFailure { onEvent(KEY_ERROR, "initialize 실패: ${it.cause ?: it}"); return }
         for ((getter, register, key) in targets) {
             runCatching { subscribe(v, getter, register, key) }
-                .onFailure { onEvent(KEY_ERROR, "$register 실패: ${it.cause ?: it}") }
+                .onFailure { onEvent(if (key == KEY_SEAT) KEY_INFO else KEY_ERROR, "$register 실패(${if (key == KEY_SEAT) "필수 아님" else "확인 필요"}): ${it.cause ?: it}") }
         }
     }
 
@@ -72,13 +72,31 @@ class VehicleProbe(context: Context, private val onEvent: (key: String, value: A
                 }
             }
         }
-        // 좌석처럼 영역(Area)이 필요한 경우: enum 하나를 받는 생성자에 조수석/첫 값을 넣는다
-        else -> type.constructors.firstOrNull { it.parameterCount == 1 && it.parameterTypes[0].isEnum }?.let { c ->
-            val constants = c.parameterTypes[0].enumConstants!!
-            val pick = constants.firstOrNull { it.toString().contains("PASSENGER") || it.toString().contains("RIGHT") }
-                ?: constants.first()
-            c.newInstance(pick)
+        type.isEnum -> pickEnum(type.enumConstants!!)
+        // 좌석처럼 영역(Area)이 필요한 경우: enum 인자로 만들 수 있는 생성자를 찾는다
+        else -> buildArea(type) ?: error(
+            "${type.simpleName} 생성 방법 미확인. 생성자: " +
+                type.constructors.joinToString { c -> "(" + c.parameterTypes.joinToString { it.simpleName } + ")" }
+        )
+    }
+
+    private fun pickEnum(constants: Array<out Any>): Any =
+        constants.firstOrNull { it.toString().contains("PASSENGER") || it.toString().contains("RIGHT") } ?: constants.first()
+
+    private fun buildArea(type: Class<*>): Any? {
+        for (c in type.constructors.sortedBy { it.parameterCount }) {
+            val args = c.parameterTypes.map { p ->
+                when {
+                    p.isEnum -> pickEnum(p.enumConstants!!)
+                    p == Int::class.javaPrimitiveType || p == Int::class.javaObjectType -> 0
+                    p == Boolean::class.javaPrimitiveType -> false
+                    else -> return@map null
+                }
+            }
+            if (args.any { it == null } && c.parameterCount > 0) continue
+            runCatching { return c.newInstance(*args.toTypedArray()) }
         }
+        return null
     }
 
     companion object {
