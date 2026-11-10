@@ -5,6 +5,7 @@ plugins {
 android {
     namespace = "ai.malbeot.drive"
     compileSdk = 35
+    useLibrary("android.car")   // AAOS Car API (차속·기어)
     defaultConfig {
         applicationId = "ai.malbeot.drive"
         minSdk = 28          // Pleos Connect 최소 요구

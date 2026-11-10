@@ -2,39 +2,87 @@ package ai.malbeot.drive
 
 import android.graphics.Color
 import android.os.Bundle
-import android.view.Gravity
+import android.os.SystemClock
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import ai.malbeot.drive.signal.AaosSignals
+import ai.malbeot.drive.signal.VehicleProbe
 import ai.malbeot.engine.DialogResult
 import ai.malbeot.engine.RiskEngine
 import ai.malbeot.engine.RiskInput
 import ai.malbeot.engine.RiskLevel
+import ai.malbeot.engine.SteeringCorrectionDetector
+import ai.malbeot.engine.SteeringSample
+import java.util.Calendar
 
 /**
- * 1단계 골격: 엔진 동작 확인용 화면.
- * 다음 단계: SignalCollector(Vehicle SDK 콜백) → 실시간 점수, DialogManager, NaviHelper 경유지, 데모 재생.
+ * 2단계: 실시간 차량 신호 확인 화면.
+ * Virtual Console에서 조향각·방향지시등·기어를 바꾸면 값과 휴식 권장도가 바로 바뀌는지 확인한다.
  */
 class MainActivity : AppCompatActivity() {
     private val engine = RiskEngine()
+    private val detector = SteeringCorrectionDetector()
+    private val values = linkedMapOf<String, String>()
+    private val log = ArrayDeque<String>()
+    private val samples = ArrayDeque<SteeringSample>()
+    private var speedKmh = 0.0
+    private var turnOn = false
+    private var driveStartMs: Long? = null
+    private lateinit var text: TextView
+    private lateinit var probe: VehicleProbe
+    private lateinit var aaos: AaosSignals
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // 데모: 시나리오 S1 00:30 시점 값
-        val r = engine.evaluate(RiskInput(150.0, 0, 0.9, 3, 1.5, 95.0, DialogResult.NO_ANSWER, 2))
-        val view = TextView(this).apply {
-            textSize = 48f
-            gravity = Gravity.CENTER
-            setTextColor(Color.WHITE)
-            text = "휴식 권장도 ${r.score}\n${r.level}"
-            setBackgroundColor(
-                when (r.level) {
-                    RiskLevel.NORMAL -> Color.parseColor("#2E7D32")
-                    RiskLevel.CAUTION -> Color.parseColor("#F9A825")
-                    RiskLevel.ALERT -> Color.parseColor("#EF6C00")
-                    RiskLevel.DANGER -> Color.parseColor("#C62828")
-                }
-            )
+        text = TextView(this).apply { textSize = 22f; setPadding(40, 30, 40, 30); setTextColor(Color.WHITE) }
+        setContentView(text)
+        probe = VehicleProbe(this, ::onSignal)
+        aaos = AaosSignals(this, ::onSignal)
+        render()
+    }
+
+    override fun onStart() { super.onStart(); probe.start(); aaos.start() }
+    override fun onStop() { probe.stop(); aaos.stop(); super.onStop() }
+
+    private fun onSignal(key: String, value: Any?) = runOnUiThread {
+        val now = SystemClock.elapsedRealtime()
+        when (key) {
+            VehicleProbe.KEY_ERROR, VehicleProbe.KEY_INFO -> { log.addFirst("$key: $value"); while (log.size > 6) log.removeLast() }
+            else -> values[key] = value?.toString() ?: "null"
         }
-        setContentView(view)
+        when (key) {
+            AaosSignals.KEY_SPEED -> {
+                speedKmh = (value as? Number)?.toDouble() ?: 0.0
+                if (speedKmh > 1 && driveStartMs == null) driveStartMs = now
+                if (speedKmh <= 1) driveStartMs = null
+            }
+            VehicleProbe.KEY_TURN_SIGNAL -> turnOn = value?.toString()?.contains("OFF", true) == false && value.toString() != "0"
+            VehicleProbe.KEY_STEERING -> VehicleProbe.toDouble(value)?.let { deg ->
+                samples.addLast(SteeringSample(now, deg, turnOn, speedKmh))
+                while (samples.isNotEmpty() && now - samples.first().tMs > 5 * 60_000) samples.removeFirst()
+            }
+        }
+        render()
+    }
+
+    private fun render() {
+        val now = SystemClock.elapsedRealtime()
+        val corrections = detector.detect(samples.toList()).size
+        val driveMin = driveStartMs?.let { (now - it) / 60_000.0 } ?: 0.0
+        val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+        val r = engine.evaluate(RiskInput(driveMin, hour, 0.0, corrections, 1.0, speedKmh, DialogResult.NONE, 0))
+        text.setBackgroundColor(when (r.level) {
+            RiskLevel.NORMAL -> Color.parseColor("#2E7D32"); RiskLevel.CAUTION -> Color.parseColor("#F9A825")
+            RiskLevel.ALERT -> Color.parseColor("#EF6C00"); RiskLevel.DANGER -> Color.parseColor("#C62828")
+        })
+        text.text = buildString {
+            appendLine("말벗 드라이브 · 차량 신호 확인")
+            appendLine("휴식 권장도 ${r.score} (${r.level})  ·  연속주행 ${"%.1f".format(driveMin)}분  ·  급교정 ${corrections}건/5분")
+            appendLine()
+            if (values.isEmpty()) appendLine("아직 받은 차량 값 없음")
+            values.forEach { (k, v) -> appendLine("$k : $v") }
+            appendLine()
+            log.forEach { appendLine(it) }
+        }
     }
 }
