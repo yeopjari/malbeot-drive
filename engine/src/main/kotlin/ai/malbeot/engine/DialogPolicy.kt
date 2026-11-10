@@ -8,14 +8,23 @@ enum class PromptKind { CHAT, QUIZ, REST }
 
 data class Prompt(val kind: PromptKind, val text: String, val expected: List<String> = emptyList())
 
+/**
+ * 시간 기준은 '질문이 끝난 뒤 운전자가 말을 시작하기까지(발화 시작 지연)'로 잰다.
+ * - 일상 대화의 차례 바꿈 간격은 보통 1초 이하 → 3초 안에 말을 시작하면 정상
+ * - 3~7초: 늦은 반응(졸림 의심). 7초 안에 말을 시작하지 않으면 무응답.
+ *   100km/h에서 7초 ≈ 194m 주행이므로 그 이상 기다리지 않는다.
+ * - 무응답이면 15초 뒤 다시 확인(2회 무응답 → 바닥 70점, 쉼터 제안)
+ * 수치는 초기 추정치이며 실차 데이터로 보정한다.
+ */
 data class DialogConfig(
-    val fastAnswerMs: Long = 5_000,        // 이 안에 대답하면 정상
+    val fastAnswerMs: Long = 3_000,        // 이 안에 말을 시작하면 정상
+    val noAnswerMs: Long = 7_000,          // 이 안에 말을 시작하지 않으면 무응답
     val sameLevelCooldownMs: Long = 3 * 60_000,
-    val noAnswerRetryMs: Long = 30_000,     // 무응답이면 30초 뒤 다시 확인
+    val noAnswerRetryMs: Long = 15_000,     // 무응답이면 15초 뒤 다시 확인
     val resultValidMs: Long = 10 * 60_000,  // 대화 결과가 점수에 반영되는 시간
 )
 
-class DialogPolicy(private val cfg: DialogConfig = DialogConfig()) {
+class DialogPolicy(val cfg: DialogConfig = DialogConfig()) {
     var lastResult: DialogResult = DialogResult.NONE; private set
     var consecutiveNoAnswer: Int = 0; private set
     private var lastResultAt: Long = Long.MIN_VALUE / 2
@@ -31,7 +40,7 @@ class DialogPolicy(private val cfg: DialogConfig = DialogConfig()) {
     fun nextPrompt(level: RiskLevel, now: Long, busy: Boolean): Prompt? {
         if (busy || level == RiskLevel.NORMAL) return null
         val levelUp = level.ordinal > lastAskedLevel.ordinal
-        val retry = lastResult == DialogResult.NO_ANSWER && now - lastAskAt >= cfg.noAnswerRetryMs
+        val retry = lastResult == DialogResult.NO_ANSWER && now - lastResultAt >= cfg.noAnswerRetryMs // 무응답 판정 시점부터
         val cooled = now - lastAskAt >= cfg.sameLevelCooldownMs
         if (!levelUp && !retry && !cooled) return null
         lastAskAt = now
@@ -55,7 +64,7 @@ class DialogPolicy(private val cfg: DialogConfig = DialogConfig()) {
     fun onAnswer(prompt: Prompt, heard: String?, latencyMs: Long, now: Long): Answer {
         val text = heard?.trim().orEmpty()
         val result = when {
-            text.isEmpty() -> DialogResult.NO_ANSWER
+            text.isEmpty() || latencyMs > cfg.noAnswerMs -> DialogResult.NO_ANSWER
             prompt.kind == PromptKind.QUIZ && !matches(text, prompt.expected) -> DialogResult.DELAYED_OR_WRONG
             latencyMs > cfg.fastAnswerMs -> DialogResult.DELAYED_OR_WRONG
             else -> DialogResult.OK

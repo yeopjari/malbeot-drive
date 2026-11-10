@@ -30,6 +30,7 @@ class VoiceCoach(
     private var ttsReady = false
     private var recognizer: SpeechRecognizer? = null
     private var listenStartedAt = 0L
+    private var speechOnsetAt = 0L   // 운전자가 말을 시작한 시각(지연은 이 시점 기준)
     var busy = false; private set
     val canListen: Boolean get() = SpeechRecognizer.isRecognitionAvailable(ctx)
 
@@ -58,18 +59,24 @@ class VoiceCoach(
     private fun listen() {
         if (!busy) return
         listenStartedAt = SystemClock.elapsedRealtime()
+        speechOnsetAt = 0L
         main.removeCallbacks(timeout)
-        main.postDelayed(timeout, NO_ANSWER_TIMEOUT_MS) // 10초 안에 대답이 없으면 무응답
+        main.postDelayed(timeout, NO_ANSWER_TIMEOUT_MS) // 7초 안에 말을 시작하지 않으면 무응답
         if (!canListen) { onStatus("듣는 중… (시연 버튼으로 대답 가능)"); return }
         val r = recognizer ?: SpeechRecognizer.createSpeechRecognizer(ctx).also { recognizer = it }
         r.setRecognitionListener(object : RecognitionListener {
             override fun onResults(results: Bundle?) =
                 finish(results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull())
             // 음성인식 오류(에뮬레이터 마이크 없음 등)는 바로 무응답 처리하지 않고,
-            // 10초 타임아웃까지 시연 버튼 대답을 기다린다. 10초 안에 대답이 없으면 그때 무응답.
-            override fun onError(error: Int) = onStatus("음성인식 종료(코드 $error) → 10초 안에 버튼으로 대답 가능")
+            // 7초 타임아웃까지 시연 버튼 대답을 기다린다. 그 안에 대답이 없으면 그때 무응답.
+            override fun onError(error: Int) = onStatus("음성인식 종료(코드 $error) → 7초 안에 버튼으로 대답 가능")
             override fun onReadyForSpeech(params: Bundle?) = onStatus("듣는 중…")
-            override fun onBeginningOfSpeech() {}
+            override fun onBeginningOfSpeech() {
+                // 말을 시작했으면 무응답 타이머를 멈추고, 문장이 끝날 때까지 최대 8초 더 기다린다
+                speechOnsetAt = SystemClock.elapsedRealtime()
+                main.removeCallbacks(timeout)
+                main.postDelayed(resultTimeout, 8_000)
+            }
             override fun onRmsChanged(rmsdB: Float) {}
             override fun onBufferReceived(buffer: ByteArray?) {}
             override fun onEndOfSpeech() {}
@@ -91,21 +98,23 @@ class VoiceCoach(
     }
 
     private val timeout = Runnable { recognizer?.cancel(); finish(null) }
+    private val resultTimeout = Runnable { recognizer?.cancel(); finish("(알아듣지 못함)") }
 
     private fun finish(text: String?, forcedLatency: Long? = null) {
         if (!busy) return
         busy = false
-        main.removeCallbacks(timeout)
-        val latency = forcedLatency ?: (SystemClock.elapsedRealtime() - listenStartedAt)
+        main.removeCallbacks(timeout); main.removeCallbacks(resultTimeout)
+        val end = if (speechOnsetAt > 0) speechOnsetAt else SystemClock.elapsedRealtime()
+        val latency = forcedLatency ?: (end - listenStartedAt)
         onHeard(text, latency)
     }
 
     fun say(text: String) { if (ttsReady) tts?.speak(text, TextToSpeech.QUEUE_ADD, null, "say-${SystemClock.elapsedRealtime()}") }
 
-    companion object { const val NO_ANSWER_TIMEOUT_MS = 10_000L }
+    companion object { const val NO_ANSWER_TIMEOUT_MS = 7_000L }
 
     fun stop() {
-        main.removeCallbacks(timeout)
+        main.removeCallbacks(timeout); main.removeCallbacks(resultTimeout)
         runCatching { recognizer?.destroy() }; recognizer = null
         runCatching { tts?.shutdown() }; tts = null
         busy = false

@@ -23,7 +23,8 @@ class DialogPolicyTest {
         val p = DialogPolicy()
         val q = p.nextPrompt(RiskLevel.ALERT, 0, false)!!
         p.onAnswer(q, null, 8_000, 8_000)
-        val q2 = p.nextPrompt(RiskLevel.ALERT, 40_000, false)!! // 무응답 30초 뒤 재확인
+        assertNull(p.nextPrompt(RiskLevel.ALERT, 20_000, false))   // 무응답 후 15초 전에는 재질문 안 함
+        val q2 = p.nextPrompt(RiskLevel.ALERT, 40_000, false)!! // 무응답 15초 뒤 재확인
         p.onAnswer(q2, "", 8_000, 48_000)
         assertEquals(2, p.consecutiveNoAnswer)
         val r = RiskEngine().evaluate(RiskInput(30.0, 14, 0.0, 0, 1.0, 100.0, p.currentResult(48_000), p.consecutiveNoAnswer))
@@ -35,7 +36,10 @@ class DialogPolicyTest {
         val quiz = DialogPolicy.QUIZZES[0]
         assertEquals(DialogResult.OK, p.onAnswer(quiz, "칠이요", 2_000, 0).result)
         assertEquals(DialogResult.DELAYED_OR_WRONG, p.onAnswer(quiz, "팔", 2_000, 0).result)
-        assertEquals(DialogResult.DELAYED_OR_WRONG, p.onAnswer(quiz, "7", 9_000, 0).result)
+        assertEquals(DialogResult.DELAYED_OR_WRONG, p.onAnswer(quiz, "7", 5_000, 0).result) // 3~7초: 늦음
+        assertEquals(DialogResult.NO_ANSWER, p.onAnswer(quiz, "7", 9_000, 0).result)        // 7초 넘게 말 시작 안 함
+        assertEquals(1, p.consecutiveNoAnswer)
+        assertEquals(DialogResult.OK, p.onAnswer(quiz, "7", 2_500, 0).result)
         assertEquals(0, p.consecutiveNoAnswer)
     }
 

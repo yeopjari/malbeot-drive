@@ -68,9 +68,9 @@ class MainActivity : AppCompatActivity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.START
             addButton("말 걸기") { askNow() }
-            addButton("대답(정상)") { voice.simulate(answerFor(currentPrompt), 2_000) }
-            addButton("늦은 대답") { voice.simulate(answerFor(currentPrompt), 8_000) }
-            addButton("무응답") { voice.simulate(null, 10_000) }
+            addButton("대답(정상)") { voice.simulate(answerFor(currentPrompt), 1_500) }
+            addButton("늦은 대답") { voice.simulate(answerFor(currentPrompt), 5_000) }
+            addButton("무응답") { voice.simulate(null, 7_000) }
             addButton("+30분") { demoExtraMin += 30; render() }
             addButton("휴식 완료") { restDone() }
         }
