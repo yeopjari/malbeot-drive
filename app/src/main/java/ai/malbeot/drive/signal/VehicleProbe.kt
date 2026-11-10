@@ -88,6 +88,10 @@ class VehicleProbe(context: Context, private val onEvent: (key: String, value: A
             val args = c.parameterTypes.map { p ->
                 when {
                     p.isEnum -> pickEnum(p.enumConstants!!)
+                    // SeatArea(SeatValue[]) 형태: enum 배열에 조수석 값 하나를 담는다
+                    p.isArray && p.componentType!!.isEnum -> java.lang.reflect.Array.newInstance(p.componentType, 1).also {
+                        java.lang.reflect.Array.set(it, 0, pickEnum(p.componentType!!.enumConstants!!))
+                    }
                     p == Int::class.javaPrimitiveType || p == Int::class.javaObjectType -> 0
                     p == Boolean::class.javaPrimitiveType -> false
                     else -> return@map null
