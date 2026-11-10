@@ -14,6 +14,12 @@
 
     <uses-feature android:name="android.hardware.type.automotive" android:required="true" />
 
+    <!-- Android 11+ 패키지 가시성: 음성인식·TTS 엔진을 찾기 위해 필요 -->
+    <queries>
+        <intent><action android:name="android.speech.RecognitionService" /></intent>
+        <intent><action android:name="android.intent.action.TTS_SERVICE" /></intent>
+    </queries>
+
     <application android:label="@string/app_name" android:theme="@style/Theme.AppCompat.DayNight.NoActionBar">
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
