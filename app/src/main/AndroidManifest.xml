@@ -20,6 +20,8 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- 주행 중에도 화면 유지: 운전자 주의분산 최적화(DO) 선언. 주행 중 화면은 글자 최소·음성 중심이어야 함 -->
+            <meta-data android:name="distractionOptimized" android:value="true" />
         </activity>
     </application>
 </manifest>
