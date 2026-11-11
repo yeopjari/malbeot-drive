@@ -2,6 +2,7 @@ package ai.malbeot.drive.voice
 
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -34,6 +35,20 @@ class VoiceCoach(
     var busy = false; private set
     val canListen: Boolean get() = SpeechRecognizer.isRecognitionAvailable(ctx)
 
+    /**
+     * 에뮬레이터에서는 실제 마이크 인식을 끄고 시연 버튼만 쓴다.
+     * 11/11 녹화 중 에뮬레이터가 음성인식(마이크)을 다시 켜는 순간 2~3회 멈추거나 꺼졌다.
+     * 에뮬레이터에는 어차피 실제 목소리가 들어오지 않으므로 기능 손실은 없다. 실차·실기기에서는 그대로 듣는다.
+     */
+    private val useMic: Boolean get() = canListen && !isEmulator()
+
+    private fun isEmulator(): Boolean {
+        val hw = Build.HARDWARE.lowercase(); val fp = Build.FINGERPRINT.lowercase(); val pr = Build.PRODUCT.lowercase()
+        return hw.contains("ranchu") || hw.contains("goldfish") || fp.startsWith("generic") ||
+            fp.contains("emulator") || fp.contains("sdk_") || pr.contains("sdk") || pr.contains("emulator") ||
+            Build.MODEL.lowercase().let { it.contains("sdk") || it.contains("emulator") }
+    }
+
     fun start() {
         tts = TextToSpeech(ctx) { status ->
             ttsReady = status == TextToSpeech.SUCCESS &&
@@ -45,7 +60,11 @@ class VoiceCoach(
                 @Deprecated("old API") override fun onError(id: String?) { if (id?.startsWith("ask-") == true) main.post { listen() } }
             })
         }
-        onStatus(if (canListen) "듣기(STT) 준비됨" else "듣기(STT) 엔진 없음 → 시연 버튼으로 대답")
+        onStatus(when {
+            useMic -> "듣기(STT) 준비됨"
+            canListen -> "에뮬레이터: 마이크 인식 끔 → 시연 버튼으로 대답"
+            else -> "듣기(STT) 엔진 없음 → 시연 버튼으로 대답"
+        })
     }
 
     /** 질문을 말하고, 끝나면 자동으로 듣기 시작 */
@@ -62,7 +81,7 @@ class VoiceCoach(
         speechOnsetAt = 0L
         main.removeCallbacks(timeout)
         main.postDelayed(timeout, NO_ANSWER_TIMEOUT_MS) // 7초 안에 말을 시작하지 않으면 무응답
-        if (!canListen) { onStatus("듣는 중… (시연 버튼으로 대답 가능)"); return }
+        if (!useMic) { onStatus("듣는 중… (시연 버튼으로 대답 가능)"); return }
         val r = recognizer ?: SpeechRecognizer.createSpeechRecognizer(ctx).also { recognizer = it }
         r.setRecognitionListener(object : RecognitionListener {
             override fun onResults(results: Bundle?) =
