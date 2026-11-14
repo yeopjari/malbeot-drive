@@ -1,12 +1,32 @@
 # 말벗 드라이브
 
-졸리기 전에 먼저 말을 걸고, 대화로 깨어 있는지 확인한 뒤, "응" 한마디로 가까운 쉼터를 경유지에 넣어 주는 Pleos Connect 차량용 음성 동승자 앱입니다.
+카메라나 추가 장비 없이 차량 신호와 대화만으로 졸음 위험을 재고, 위험해지면 먼저 말을 걸어 깨어 있는지 확인한 뒤, "응" 한마디로 가까운 쉼터를 내비 경유지에 넣어 주는 Pleos Connect 차량용 음성 동승자 앱입니다.
+
+- 시연 영상 (1분 45초, 에뮬레이터 실제 화면): https://youtu.be/cbR6Exp1fQM
+- release APK: [`apk/옆자리_말벗드라이브_release.apk`](apk/)
+- 팀 옆자리 · 현대자동차그룹 차량용 앱 개발 공모전 2026 (대학(원)생 부문)
+
+## 지금 동작하는 기능 (2026-11-13, Pleos Connect Emulator v2.1.0)
+| 기능 | 사용 SDK / API | 상태 |
+|---|---|---|
+| 차량 신호 실시간 수신 | Vehicle SDK(조향각·방향지시등·주행모드·좌석 착좌), AAOS Car API(차속·기어) | 완료 |
+| 휴식 권장도 계산 | `engine` 순수 Kotlin, 단위 테스트 13개 | 완료 (연속 주행·시간대·급교정·대화 응답·최소 점수 규칙) |
+| 먼저 말 걸기·퀴즈·응답 시간 판정 | Android 표준 음성 API (Pleos TTS/STT 공개 시 교체) | 완료 (에뮬레이터는 마이크가 없어 시연 버튼으로 대답) |
+| 목적지 안내 | NaviHelper `requestRoute` | 완료 |
+| 쉼터 경유지 추가 | NaviHelper `addWaypoint` | 완료 (시연용 쉼터 1곳) |
+| 주차(P) 휴식 인정·초기화 | 기어 신호 | 완료 |
+| 주행 중 화면 유지 | distraction-optimized | 완료 |
+
+단계별 동작: 0~29 정상(조용히 지켜봄) · 30~49 주의(가벼운 대화) · 50~69 경계(각성 퀴즈) · 70 이상 위험(쉼터 경유지 제안). 2시간 연속 주행이면 최소 50점, 두 번 연속 무응답이면 최소 70점.
+
+### 시연 버튼 (에뮬레이터용)
+`목적지 안내` 내비 경로 요청 · `말 걸기` 지금 단계의 질문 바로 실행 · `대답(정상)` 1.5초 대답 · `늦은 대답` 5초 대답 · `무응답` 대답 없음 · `+30분` 연속 주행 시간 앞당기기 · `휴식 완료` 초기화
 
 ## 구조
 | 모듈 | 내용 |
 |---|---|
 | `engine` | 순수 Kotlin. 휴식 권장도(RiskEngine), 조향 급교정 판정(SteeringCorrectionDetector). PC에서 단위 테스트 |
-| `app` | Android(Pleos Connect) 앱. 현재는 엔진 결과를 색으로 보여 주는 골격 |
+| `app` | Android(Pleos Connect) 앱. 차량 신호 수집, 단계 색 표시, 음성 대화(VoiceCoach), 내비 연동(NaviBridge), 시연 버튼 |
 | `apk/` | 제출용 release APK 위치 (`팀명_앱이름_release.apk`) |
 
 ## 테스트 환경
@@ -18,6 +38,7 @@
 ```bash
 ./gradlew :engine:test        # 엔진 단위 테스트
 ./gradlew :app:installDebug   # 에뮬레이터 실행 중에 설치
+./gradlew :app:assembleRelease  # release APK (서명 설정 필요)
 ```
 Gradle wrapper가 없으면 Android Studio로 폴더를 열면 자동 생성됩니다.
 
